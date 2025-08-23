@@ -4,6 +4,12 @@ app:
   version: "1.0.0"
   debug: false
 
+# Web Server Settings
+web:
+  host: "127.0.0.1"
+  port: 8005
+  auto_port: true  # Automatically find available port if specified port is busy
+
 # File Processing
 processing:
   watch_folder: "{{WATCH_FOLDER}}"
@@ -37,11 +43,7 @@ prompt_files:
   naming_candidates: ["naming.md", ".naming.md"]
   validation_candidates: ["filename-validation.md", ".filename-validation.md"]
 
-# Web Interface
-web:
-  host: "127.0.0.1"
-  port: 8000
-  auto_reload: false
+# Web Interface (merged with main web settings above)
 
 # Logging
 logging:

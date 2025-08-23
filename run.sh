@@ -25,4 +25,9 @@ fi
 
 # Run the application
 echo "🚀 Starting Audio Processor..."
-python main.py
+echo "💡 Available options:"
+echo "   --port XXXX        Use specific port"
+echo "   --host 0.0.0.0     Allow external connections"
+echo "   --no-auto-port     Don't auto-find available port"
+echo ""
+python main.py "$@"
