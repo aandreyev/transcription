@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin – Audio Processor</title>
+  <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2/css/pico.min.css" />
+  <style>
+    main { max-width: 720px; }
+    form label { display: block; margin: 0.5rem 0; }
+    form input { width: 100%; }
+    .muted { color: #6b7280; }
+  </style>
+  <script>
+    async function loadSettings(){
+      try {
+        const r = await fetch('/api/settings');
+        if (!r.ok) return;
+        const s = await r.json();
+        if (s.deepgram_api_key) document.getElementById('deepgram').placeholder = '••••••••';
+        if (s.openai_api_key) document.getElementById('openai').placeholder = '••••••••';
+        if (s.watch_folder) document.getElementById('watch').value = s.watch_folder;
+        if (s.processed_folder) document.getElementById('processed').value = s.processed_folder;
+        if (s.error_folder) document.getElementById('error').value = s.error_folder;
+        if (s.output_folder) document.getElementById('output').value = s.output_folder;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function saveSettings(e){
+      e.preventDefault();
+      const body = {
+        deepgram_api_key: document.getElementById('deepgram').value || undefined,
+        openai_api_key: document.getElementById('openai').value || undefined,
+        watch_folder: document.getElementById('watch').value || undefined,
+        processed_folder: document.getElementById('processed').value || undefined,
+        error_folder: document.getElementById('error').value || undefined,
+        output_folder: document.getElementById('output').value || undefined,
+      };
+      const msg = document.getElementById('msg');
+      try {
+        const res = await fetch('/api/settings', {
+          method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+        });
+        if(res.ok){ msg.textContent = 'Saved. Restart app to apply everywhere.'; }
+        else { msg.textContent = 'Save failed.'; }
+      } catch (e) {
+        msg.textContent = 'Save failed.';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('cfgForm').addEventListener('submit', saveSettings);
+      loadSettings();
+    });
+  </script>
+</head>
+<body>
+  <main class="container">
+    <h2>Configuration</h2>
+    <form id="cfgForm">
+      <label>Deepgram API Key
+        <input type="text" id="deepgram" placeholder="sk_..." autocomplete="off" />
+      </label>
+      <label>OpenAI API Key
+        <input type="text" id="openai" placeholder="sk-..." autocomplete="off" />
+      </label>
+      <label>Watch Folder
+        <input type="text" id="watch" placeholder="/path/to/input" />
+      </label>
+      <label>Processed Folder
+        <input type="text" id="processed" placeholder="/path/to/processed" />
+      </label>
+      <label>Error Folder
+        <input type="text" id="error" placeholder="/path/to/error" />
+      </label>
+      <label>Output Folder
+        <input type="text" id="output" placeholder="/path/to/output" />
+      </label>
+      <button type="submit">Save</button>
+      <small id="msg" class="muted"></small>
+    </form>
+    <p><a href="/">Return to Dashboard</a></p>
+  </main>
+</body>
+</html>
+
+

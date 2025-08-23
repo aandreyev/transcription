@@ -130,7 +130,7 @@ class AudioFileHandler(FileSystemEventHandler):
 class FileMonitor:
     def __init__(self):
         self.config = ConfigManager()
-        self.processor = AudioProcessor()
+        self.processor = None
         self.observer = None
         self.running = False
         
@@ -151,6 +151,8 @@ class FileMonitor:
             return
         
         try:
+            # Lazily create processor at start time
+            self.processor = AudioProcessor()
             # Create event handler
             event_handler = AudioFileHandler(self.processor)
             

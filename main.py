@@ -7,6 +7,7 @@ processes them with OpenAI, and generates intelligent summaries with smart file 
 """
 
 import sys
+import os
 import signal
 import threading
 import socket
@@ -96,22 +97,48 @@ class AudioProcessorApp:
             log_info("Starting Audio Processor Application")
             log_info(f"Version: {self.config.get('app.version', '1.0.0')}")
             
-            # Test system health before starting
-            processor = AudioProcessor()
-            health = processor.get_health_status()
+            # Test system health before starting (tolerant of missing keys)
+            health = None
+            try:
+                processor = AudioProcessor()
+                health = processor.get_health_status()
+            except Exception as e:
+                log_error(f"Health check limited: {e}")
+                # Build a minimal health snapshot without external services
+                connections = {
+                    'deepgram': False,
+                    'openai': False,
+                    'database': True,
+                }
+                folders = {
+                    'watch': self.config.get("processing.watch_folder"),
+                    'processed': self.config.get("processing.processed_folder"),
+                    'error': self.config.get("processing.error_folder"),
+                    'output': self.config.get("processing.output_folder"),
+                }
+                folders = {k: bool(v and os.path.exists(v) and os.access(v, os.W_OK)) for k, v in folders.items()}
+                health = {
+                    'connections': connections,
+                    'folders': folders,
+                    'stats': {'total': 0, 'status_counts': {}, 'today': 0, 'success_rate': 0},
+                    'healthy': False,
+                }
+                log_error("Continuing startup without external services; configure on /admin")
             
             if not health['healthy']:
-                log_error("System health check failed:")
-                log_error(f"Connections: {health['connections']}")
-                log_error(f"Folders: {health['folders']}")
-                
-                # Continue anyway but warn user
-                log_error("Continuing startup despite health issues...")
+                log_error("System health check reported issues")
             
-            # Start file monitor
-            log_info("Starting file monitor...")
-            self.file_monitor = FileMonitor()
-            self.file_monitor.start()
+            # Start file monitor only if watch folder configured
+            try:
+                watch_folder = self.config.get('processing.watch_folder')
+                if watch_folder and os.path.isdir(watch_folder):
+                    log_info("Starting file monitor...")
+                    self.file_monitor = FileMonitor()
+                    self.file_monitor.start()
+                else:
+                    log_error("Watch folder not configured or missing; skipping monitor. Configure on /admin")
+            except Exception as e:
+                log_error(f"File monitor not started: {e}")
             
             # Start web server
             log_info("Starting web server...")

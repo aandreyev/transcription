@@ -38,6 +38,14 @@ class HealthResponse(BaseModel):
 class ProcessFileRequest(BaseModel):
     file_path: str
 
+class SettingsRequest(BaseModel):
+    deepgram_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+    watch_folder: Optional[str] = None
+    processed_folder: Optional[str] = None
+    error_folder: Optional[str] = None
+    output_folder: Optional[str] = None
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
     
@@ -59,10 +67,21 @@ def create_app() -> FastAPI:
     
     # Initialize components
     db = Database()
-    processor = AudioProcessor()
+    processor: Optional[AudioProcessor] = None
     
     # Global file monitor instance (will be set by main app)
     file_monitor = None
+
+    def get_processor() -> Optional[AudioProcessor]:
+        nonlocal processor
+        if processor is None:
+            try:
+                processor = AudioProcessor()
+            except Exception as e:
+                # Likely missing API keys; keep as None so admin can configure
+                log_error(f"Processor init failed (likely missing keys): {e}")
+                processor = None
+        return processor
     
     @app.get("/", response_class=HTMLResponse)
     async def root():
@@ -371,13 +390,49 @@ def create_app() -> FastAPI:
         </body>
         </html>
         """
+
+    @app.get("/admin")
+    async def admin_page():
+        """Serve static admin page"""
+        admin_path = os.path.join(os.path.dirname(__file__), 'admin.html')
+        if not os.path.exists(admin_path):
+            raise HTTPException(status_code=404, detail="Admin page not found")
+        return FileResponse(admin_path, media_type='text/html')
     
     @app.get("/api/health", response_model=HealthResponse)
     async def get_health():
         """Get system health status"""
         try:
-            health = processor.get_health_status()
-            return HealthResponse(**health)
+            # Try full health via processor; fall back if not available
+            p = get_processor()
+            if p is not None:
+                health = p.get_health_status()
+                return HealthResponse(**health)
+            # Fallback health without processor (e.g., keys missing)
+            cfg = ConfigManager()
+            folders = {
+                'watch': cfg.get("processing.watch_folder"),
+                'processed': cfg.get("processing.processed_folder"),
+                'error': cfg.get("processing.error_folder"),
+                'output': cfg.get("processing.output_folder"),
+            }
+            folder_status = {}
+            for name, path in folders.items():
+                try:
+                    folder_status[name] = bool(path and os.path.exists(path) and os.access(path, os.W_OK))
+                except Exception:
+                    folder_status[name] = False
+            stats = db.get_job_stats()
+            return HealthResponse(
+                healthy=False,
+                connections={
+                    'deepgram': False,
+                    'openai': bool(os.getenv('OPENAI_API_KEY')),
+                    'database': True,
+                },
+                folders=folder_status,
+                stats=stats,
+            )
         except Exception as e:
             log_error(f"Error getting health status: {e}")
             raise HTTPException(status_code=500, detail="Failed to get health status")
@@ -426,7 +481,10 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=404, detail="File not found")
             
             # Process file in background
-            background_tasks.add_task(processor.process_file, file_path)
+            p = get_processor()
+            if p is None:
+                raise HTTPException(status_code=400, detail="Service not configured. Please set API keys on /admin")
+            background_tasks.add_task(p.process_file, file_path)
             
             return {"message": "File processing started", "file_path": file_path}
             
@@ -460,5 +518,71 @@ def create_app() -> FastAPI:
         except Exception as e:
             log_error(f"Error getting logs: {e}")
             raise HTTPException(status_code=500, detail="Failed to get logs")
+
+    @app.get("/api/settings")
+    async def get_settings():
+        """Read current settings from environment/config"""
+        try:
+            cfg = ConfigManager()
+            return {
+                "deepgram_api_key": bool(os.getenv("DEEPGRAM_API_KEY")),
+                "openai_api_key": bool(os.getenv("OPENAI_API_KEY")),
+                "watch_folder": os.getenv("WATCH_FOLDER") or cfg.get("processing.watch_folder"),
+                "processed_folder": os.getenv("PROCESSED_FOLDER") or cfg.get("processing.processed_folder"),
+                "error_folder": os.getenv("ERROR_FOLDER") or cfg.get("processing.error_folder"),
+                "output_folder": os.getenv("OUTPUT_FOLDER") or cfg.get("processing.output_folder"),
+            }
+        except Exception as e:
+            log_error(f"Error reading settings: {e}")
+            raise HTTPException(status_code=500, detail="Failed to read settings")
+
+    @app.post("/api/settings")
+    async def save_settings(req: SettingsRequest):
+        """Persist settings into config/.env so app can use them next start"""
+        try:
+            os.makedirs("config", exist_ok=True)
+            path = os.path.join("config", ".env")
+
+            # Load existing lines to preserve unknown keys
+            existing: Dict[str, str] = {}
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            if not line.strip() or line.strip().startswith("#"):
+                                continue
+                            if "=" in line:
+                                k, v = line.strip().split("=", 1)
+                                existing[k] = v
+                except Exception:
+                    pass
+
+            def q(value: Optional[str]) -> Optional[str]:
+                if value is None:
+                    return None
+                # Quote values to be safe with spaces
+                v = value.replace('"', '\\"')
+                return f'"{v}"'
+
+            updates = {
+                "DEEPGRAM_API_KEY": q(req.deepgram_api_key) if req.deepgram_api_key is not None else existing.get("DEEPGRAM_API_KEY"),
+                "OPENAI_API_KEY": q(req.openai_api_key) if req.openai_api_key is not None else existing.get("OPENAI_API_KEY"),
+                "WATCH_FOLDER": q(req.watch_folder) if req.watch_folder is not None else existing.get("WATCH_FOLDER"),
+                "PROCESSED_FOLDER": q(req.processed_folder) if req.processed_folder is not None else existing.get("PROCESSED_FOLDER"),
+                "ERROR_FOLDER": q(req.error_folder) if req.error_folder is not None else existing.get("ERROR_FOLDER"),
+                "OUTPUT_FOLDER": q(req.output_folder) if req.output_folder is not None else existing.get("OUTPUT_FOLDER"),
+            }
+
+            # Write merged
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("# Managed by admin UI\n")
+                for k, v in updates.items():
+                    if v is not None:
+                        f.write(f"{k}={v}\n")
+
+            return {"message": "Settings saved. Restart app to apply."}
+        except Exception as e:
+            log_error(f"Error saving settings: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save settings")
     
     return app
