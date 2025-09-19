@@ -1,3 +1,26 @@
+## Quick install (macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aandreyev/transcription/main/install-macos.sh | bash
+```
+
+This will install Python 3.12 (via Homebrew if needed), clone/update the app to `~/Applications/Transcription`, run setup, and create a double-clickable `Start Transcription.command`.
+
+Open the admin page at `http://127.0.0.1:8005/admin` to set API keys and folders.
+
+### Auto-start on login (optional)
+
+```bash
+cd ~/Applications/Transcription
+bash scripts/install-launchagent.sh
+```
+
+To remove:
+
+```bash
+bash scripts/uninstall-launchagent.sh
+```
+
 # Audio Processor
 
 An intelligent audio transcription and processing system that automatically monitors a folder for audio files, transcribes them using Deepgram, processes them with OpenAI, and generates intelligent summaries with smart file naming.
