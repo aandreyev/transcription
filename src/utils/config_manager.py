@@ -13,8 +13,8 @@ class ConfigManager:
     
     def _load_config(self):
         """Load configuration from YAML and environment variables"""
-        # Load environment variables
-        load_dotenv(self.env_path)
+        # Load environment variables (override so admin changes take effect immediately)
+        load_dotenv(self.env_path, override=True)
         
         # Load YAML config
         with open(self.config_path, 'r') as file:

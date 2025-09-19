@@ -276,25 +276,35 @@ class OpenAIProcessor:
     
     def _process_with_retry(self, prompt: str, job_id: Optional[int] = None, 
                            expect_json: bool = False, max_retries: int = 3, *, model: Optional[str] = None, temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> str:
-        """Process prompt with retry logic"""
+        """Process prompt with retry logic (Chat Completions for gpt-4*; Responses API for o1*)."""
+        model_id = (model or self.config.get("openai.model", "gpt-4o"))
+        is_o1 = str(model_id).lower().startswith("o1")
+        sys_instructions = "You are a helpful meeting assistant that analyzes transcripts and extracts key information."
         for attempt in range(max_retries):
             try:
-                response = self.client.chat.completions.create(
-                    model=model or self.config.get("openai.model", "gpt-4o"),
-                    messages=[
-                        {
-                            "role": "system", 
-                            "content": "You are a helpful meeting assistant that analyzes transcripts and extracts key information."
-                        },
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=(temperature if temperature is not None else self.config.get("openai.temperature", 0.7)),
-                    # Some newer models expect max_completion_tokens instead of max_tokens
-                    max_completion_tokens=(max_tokens if max_tokens is not None else self.config.get("openai.max_tokens", 2000))
-                )
-                
-                content = response.choices[0].message.content
-                
+                if is_o1:
+                    # Responses API path
+                    # Some o1 models do not support temperature; omit it for compatibility
+                    response = self.client.responses.create(
+                        model=model_id,
+                        input=[{"role": "user", "content": prompt}],
+                        instructions=sys_instructions,
+                        max_output_tokens=(max_tokens if max_tokens is not None else self.config.get("openai.max_tokens", 2000))
+                    )
+                    content = getattr(response, 'output_text', None) or ""
+                else:
+                    # Chat Completions path
+                    response = self.client.chat.completions.create(
+                        model=model_id,
+                        messages=[
+                            {"role": "system", "content": sys_instructions},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=(temperature if temperature is not None else self.config.get("openai.temperature", 0.7)),
+                        max_completion_tokens=(max_tokens if max_tokens is not None else self.config.get("openai.max_tokens", 2000))
+                    )
+                    content = response.choices[0].message.content
+
                 # Validate JSON if expected
                 if expect_json:
                     try:
@@ -305,9 +315,9 @@ class OpenAIProcessor:
                             continue
                         else:
                             raise ValueError("Failed to get valid JSON response")
-                
+
                 return content
-                
+
             except Exception as e:
                 if attempt < max_retries - 1:
                     wait_time = 2 ** attempt  # Exponential backoff
@@ -446,12 +456,24 @@ Transcript: {transcript}"""
     def test_connection(self) -> bool:
         """Test OpenAI API connection"""
         try:
-            response = self.client.chat.completions.create(
-                model=self.config.get("openai.model", "gpt-4o"),
-                messages=[{"role": "user", "content": "Hello"}],
-                max_tokens=5
-            )
-            return bool(response.choices[0].message.content)
+            model = self.config.get("openai.model", "gpt-4o")
+            if str(model).lower().startswith("o1"):
+                # Responses API path for o1 family
+                resp = self.client.responses.create(
+                    model=model,
+                    input=[{"role": "user", "content": "Hello"}],
+                    max_output_tokens=5
+                )
+                content = getattr(resp, 'output_text', None)
+                return bool(content)
+            else:
+                # Chat Completions path
+                response = self.client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": "Hello"}],
+                    max_completion_tokens=5
+                )
+                return bool(response.choices[0].message.content)
         except Exception as e:
             log_error(f"OpenAI connection test failed: {e}")
             return False

@@ -48,7 +48,8 @@ def resolve_openai_params(
     overrides: Optional[Dict[str, object]] = None,
 ) -> Tuple[str, float, int]:
     ov = (overrides or {}).get('openai', {}) if isinstance(overrides, dict) else {}
-    model = ov.get('model', config.get('openai.model', 'gpt-4o'))
+    # Single source of truth for model: config.yaml
+    model = config.get('openai.model', 'gpt-4o')
     temperature = ov.get('temperature', config.get('openai.temperature', 0.7))
     max_tokens = config.get('openai.max_tokens', 2000)
     try:

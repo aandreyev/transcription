@@ -39,6 +39,7 @@ class ProcessFileRequest(BaseModel):
     file_path: str
 
 class SettingsRequest(BaseModel):
+    model: Optional[str] = None
     deepgram_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     watch_folder: Optional[str] = None
@@ -136,7 +137,9 @@ def create_app() -> FastAPI:
                             </div>
                         </li>
                     </ul>
-                    <ul></ul>
+                    <ul>
+                        <li><a href="/admin" role="button">Admin</a></li>
+                    </ul>
                 </nav>
                 <div id="mini-stats" class="mini-stats"></div>
             </header>
@@ -525,6 +528,7 @@ def create_app() -> FastAPI:
         try:
             cfg = ConfigManager()
             return {
+                "model": cfg.get("openai.model"),
                 "deepgram_api_key": bool(os.getenv("DEEPGRAM_API_KEY")),
                 "openai_api_key": bool(os.getenv("OPENAI_API_KEY")),
                 "watch_folder": os.getenv("WATCH_FOLDER") or cfg.get("processing.watch_folder"),
@@ -538,10 +542,11 @@ def create_app() -> FastAPI:
 
     @app.post("/api/settings")
     async def save_settings(req: SettingsRequest):
-        """Persist settings into config/.env so app can use them next start"""
+        """Persist settings into config/.env and config.yaml (model) so app can use them next start"""
         try:
             os.makedirs("config", exist_ok=True)
             path = os.path.join("config", ".env")
+            cfg = ConfigManager()
 
             # Load existing lines to preserve unknown keys
             existing: Dict[str, str] = {}
@@ -579,6 +584,20 @@ def create_app() -> FastAPI:
                 for k, v in updates.items():
                     if v is not None:
                         f.write(f"{k}={v}\n")
+
+            # If model provided, update config.yaml directly
+            if req.model is not None:
+                try:
+                    import yaml
+                    with open(cfg.config_path, 'r', encoding='utf-8') as f:
+                        data = yaml.safe_load(f) or {}
+                    if 'openai' not in data or not isinstance(data['openai'], dict):
+                        data['openai'] = {}
+                    data['openai']['model'] = req.model
+                    with open(cfg.config_path, 'w', encoding='utf-8') as f:
+                        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+                except Exception as e:
+                    log_error(f"Failed to update config.yaml model: {e}")
 
             return {"message": "Settings saved. Restart app to apply."}
         except Exception as e:

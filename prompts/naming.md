@@ -1,17 +1,19 @@
-Create a complete filename for this file relating to a legal meeting. Use the original filename and the content of the transcript as the sources of information to construct a well-formed file name following the conventions and style set out below.
+Create a complete filename for this file relating to a legal meeting.
+
+Use the original filename and the content of the transcript as the sources of information to construct a well-formed file name following the conventions and style set out below.
 
 **Filename Format:** [Date] [Type] with [Names] re [Topic] - [Duration]min [MatterNumber]
 
 Where:
   [DATE] - This is the date of the meeting. This can usually be extracted from the original filename. It is usually a 8-digit date in the format YYYYMMDD. This is NOT the date that the file is transcribed.
 
-  [Type] - This is the type of meeting that has been recorded and transcribed. Common types of meeting are 'Calls', 'Meetings', 'Interviews', 'Presentations'. This can usually be extracted from the original filename. However, sometimes it needs to be determined from the transcript itself. Common shorthand includes 'TA' for 'Call' and 'MTG' for 'Meeting'.
+  [Type] - This is the type of meeting that has been recorded and transcribed. Common types of meeting are 'Calls', 'Meetings', 'Interviews', 'Presentations'. This can usually be extracted from the original filename. However, sometimes it needs to be determined from the transcript itself. Common shorthand includes 'TA' for a 'Call', and 'MTG' for a 'Meeting'.
 
   [Names] - These are the names of people involved in the meeting. The original filename usually includes at least one Name. Sometimes it is a single name (e.g. John), and sometimes it is a full first and second name (e.g. 'John Smith'). Sometimes it is more than one name, (e.g. John and Karen).
 
   [Topic] - This is the main topic of the meeting. This can usually be extracted from the original filename (e.g. 're estate administration'). However, if there is no main topic in the original file name, you will need to use the transcript to extract the topic.
 
-  [Duration] - This is the duration of the meeting in minutes. This can usually be extracted from the original filename.
+  [Duration] - This is the duration of the meeting in minutes. This can usually be extracted from the original filename or file metadata.
 
   [MatterNumber] - This is the 5-digit matter number that corresponds to our practice management system. You can identify it by square brackets or underscores (e.g. [12345] or _12345_). They are usualy at the end of the original filename.
 
