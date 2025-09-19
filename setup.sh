@@ -71,24 +71,26 @@ echo "✅ Directories created"
 
 # Check if .env file exists
 echo "🔧 Checking configuration..."
+EXAMPLE_BASE="$HOME/AudioProcessor"
 if [ ! -f "config/.env" ]; then
     echo "⚠️  Environment file not found. Creating template..."
-    cat > config/.env << 'EOF'
+    mkdir -p config
+    cat > config/.env << EOF
 # API Keys
 DEEPGRAM_API_KEY=your_deepgram_key_here
 OPENAI_API_KEY=your_openai_key_here
 
-# Folder Paths (customize for your system)
-WATCH_FOLDER=/Users/yourusername/OneDrive/AudioProcessor/input
-PROCESSED_FOLDER=/Users/yourusername/OneDrive/AudioProcessor/processed
-ERROR_FOLDER=/Users/yourusername/OneDrive/AudioProcessor/error
-OUTPUT_FOLDER=/Users/yourusername/OneDrive/AudioProcessor/output
+# Folder Paths (prefilled with defaults)
+WATCH_FOLDER="$EXAMPLE_BASE/input"
+PROCESSED_FOLDER="$EXAMPLE_BASE/processed"
+ERROR_FOLDER="$EXAMPLE_BASE/error"
+OUTPUT_FOLDER="$EXAMPLE_BASE/output"
 
 # Database
 DATABASE_URL=sqlite:///data/audio_processor.db
 EOF
     echo "📝 Template .env file created at config/.env"
-    echo "⚠️  Please edit config/.env with your actual API keys and folder paths"
+    echo "✅ Default folders set to: $EXAMPLE_BASE/{input,processed,error,output}"
 else
     echo "✅ Environment file exists"
 fi
