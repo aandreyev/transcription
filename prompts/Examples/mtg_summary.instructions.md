@@ -1,6 +1,5 @@
 ---
 openai:
-  model: gpt-4o
   temperature: 0.3
 prompts:
   summary_mode: replace
