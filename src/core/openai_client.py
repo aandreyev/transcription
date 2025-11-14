@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, Tuple
 from openai import OpenAI
 from src.utils import ConfigManager, log_info, log_error, log_warning, read_prompt_file
 from src.utils.prompt_manager import build_transcript_summary, combine_prompt, resolve_openai_params
+from src.utils.connectivity import check_openai_connectivity
 
 class OpenAIProcessor:
     def __init__(self):
@@ -454,26 +455,8 @@ Transcript: {transcript}"""
         }
     
     def test_connection(self) -> bool:
-        """Test OpenAI API connection"""
-        try:
-            model = self.config.get("openai.model", "gpt-4o")
-            if str(model).lower().startswith("o1"):
-                # Responses API path for o1 family
-                resp = self.client.responses.create(
-                    model=model,
-                    input=[{"role": "user", "content": "Hello"}],
-                    max_output_tokens=5
-                )
-                content = getattr(resp, 'output_text', None)
-                return bool(content)
-            else:
-                # Chat Completions path
-                response = self.client.chat.completions.create(
-                    model=model,
-                    messages=[{"role": "user", "content": "Hello"}],
-                    max_completion_tokens=5
-                )
-                return bool(response.choices[0].message.content)
-        except Exception as e:
-            log_error(f"OpenAI connection test failed: {e}")
-            return False
+        """Test OpenAI API connection via lightweight ping."""
+        ok, reason = check_openai_connectivity(self.config.get("openai.model", "gpt-4o"))
+        if not ok and reason:
+            log_error(f"OpenAI connection test failed: {reason}")
+        return ok

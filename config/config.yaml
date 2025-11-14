@@ -6,6 +6,7 @@ web:
   host: 127.0.0.1
   port: 8005
   auto_port: true
+  health_cache_seconds: 60
 processing:
   watch_folder: '{{WATCH_FOLDER}}'
   processed_folder: '{{PROCESSED_FOLDER}}'

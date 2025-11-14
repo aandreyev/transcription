@@ -10,6 +10,7 @@ from src.utils import (
     log_warning,
     resolve_folder_prompt,
 )
+from src.utils.health import build_health_snapshot
 
 class AudioProcessor:
     def __init__(self):
@@ -315,30 +316,4 @@ class AudioProcessor:
     
     def get_health_status(self) -> dict:
         """Get overall system health status"""
-        connections = self.test_connections()
-        stats = self.db.get_job_stats()
-        
-        # Check folder accessibility
-        folders = {
-            'watch': self.config.get("processing.watch_folder"),
-            'processed': self.config.get("processing.processed_folder"),
-            'error': self.config.get("processing.error_folder"),
-            'output': self.config.get("processing.output_folder")
-        }
-        
-        folder_status = {}
-        for name, path in folders.items():
-            try:
-                if path and os.path.exists(path) and os.access(path, os.W_OK):
-                    folder_status[name] = True
-                else:
-                    folder_status[name] = False
-            except:
-                folder_status[name] = False
-        
-        return {
-            'connections': connections,
-            'folders': folder_status,
-            'stats': stats,
-            'healthy': all(connections.values()) and all(folder_status.values())
-        }
+        return build_health_snapshot(db=self.db)

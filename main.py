@@ -14,6 +14,7 @@ import socket
 import argparse
 from src.core import FileMonitor, AudioProcessor
 from src.utils import ConfigManager, log_info, log_error
+from src.utils.health import build_health_snapshot
 from src.web.app import create_app
 import uvicorn
 
@@ -24,6 +25,8 @@ class AudioProcessorApp:
         self.web_server = None
         self.running = False
         self.actual_port = None
+        self.web_host = self.config.get('web.host', '127.0.0.1')
+        self.web_url = None
         self.port_override = port_override
     
     def find_available_port(self, start_port, max_attempts=20):
@@ -98,34 +101,9 @@ class AudioProcessorApp:
             log_info(f"Version: {self.config.get('app.version', '1.0.0')}")
             
             # Test system health before starting (tolerant of missing keys)
-            health = None
-            try:
-                processor = AudioProcessor()
-                health = processor.get_health_status()
-            except Exception as e:
-                log_error(f"Health check limited: {e}")
-                # Build a minimal health snapshot without external services
-                connections = {
-                    'deepgram': False,
-                    'openai': False,
-                    'database': True,
-                }
-                folders = {
-                    'watch': self.config.get("processing.watch_folder"),
-                    'processed': self.config.get("processing.processed_folder"),
-                    'error': self.config.get("processing.error_folder"),
-                    'output': self.config.get("processing.output_folder"),
-                }
-                folders = {k: bool(v and os.path.exists(v) and os.access(v, os.W_OK)) for k, v in folders.items()}
-                health = {
-                    'connections': connections,
-                    'folders': folders,
-                    'stats': {'total': 0, 'status_counts': {}, 'today': 0, 'success_rate': 0},
-                    'healthy': False,
-                }
-                log_error("Continuing startup without external services; configure on /admin")
+            health = build_health_snapshot(include_stats=False)
             
-            if not health['healthy']:
+            if not health.get('healthy'):
                 log_error("System health check reported issues")
             
             # Start file monitor only if watch folder configured
@@ -146,7 +124,9 @@ class AudioProcessorApp:
             
             self.running = True
             log_info("Audio Processor Application started successfully")
-            log_info(f"Web interface available at: http://{self.config.get('web.host', '127.0.0.1')}:{self.actual_port}")
+            display_url = self.web_url or f"http://{self.web_host}:{self.actual_port}"
+            log_info(f"Web interface available at: {display_url}")
+            print(f"🌐 Web interface: {display_url}")
             log_info(f"Monitoring folder: {self.config.get('processing.watch_folder')}")
             
         except Exception as e:
@@ -159,6 +139,7 @@ class AudioProcessorApp:
         # Determine port to use
         desired_port = self.port_override or self.config.get('web.port', 8005)
         auto_port = self.config.get('web.auto_port', True)
+        host = self.config.get('web.host', '127.0.0.1')
         
         if auto_port:
             try:
@@ -171,12 +152,15 @@ class AudioProcessorApp:
         else:
             self.actual_port = desired_port
         
+        self.web_host = host
+        self.web_url = f"http://{self.web_host}:{self.actual_port}"
+        
         def run_server():
             try:
                 app = create_app()
                 uvicorn.run(
                     app,
-                    host=self.config.get('web.host', '127.0.0.1'),
+                    host=self.web_host,
                     port=self.actual_port,
                     log_level="info" if self.config.get('app.debug', False) else "warning",
                     access_log=False
@@ -186,6 +170,7 @@ class AudioProcessorApp:
         
         self.web_server = threading.Thread(target=run_server, daemon=True)
         self.web_server.start()
+        log_info(f"Web server thread running at: {self.web_url}")
     
     def stop(self):
         """Stop the application gracefully"""

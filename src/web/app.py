@@ -1,3 +1,6 @@
+import threading
+import time
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
@@ -9,6 +12,7 @@ from datetime import datetime
 
 from src.core import Database, AudioProcessor, FileMonitor
 from src.utils import ConfigManager, log_info, log_error
+from src.utils.health import build_health_snapshot
 
 # Pydantic models for API
 class JobResponse(BaseModel):
@@ -69,6 +73,23 @@ def create_app() -> FastAPI:
     # Initialize components
     db = Database()
     processor: Optional[AudioProcessor] = None
+    health_cache: Dict[str, Any] = {'data': None, 'timestamp': 0.0}
+    health_lock = threading.Lock()
+    cache_ttl = max(5, int(config.get('web.health_cache_seconds', 60)))
+
+    def get_cached_health(force: bool = False) -> Dict[str, Any]:
+        now = time.time()
+        with health_lock:
+            data = health_cache['data']
+            ts = health_cache['timestamp']
+            if not force and data and (now - ts) < cache_ttl:
+                return data
+
+        snapshot = build_health_snapshot(db)
+        with health_lock:
+            health_cache['data'] = snapshot
+            health_cache['timestamp'] = time.time()
+        return snapshot
     
     # Global file monitor instance (will be set by main app)
     file_monitor = None
@@ -403,39 +424,11 @@ def create_app() -> FastAPI:
         return FileResponse(admin_path, media_type='text/html')
     
     @app.get("/api/health", response_model=HealthResponse)
-    async def get_health():
-        """Get system health status"""
+    async def get_health(force: bool = False):
+        """Get system health status (cached)."""
         try:
-            # Try full health via processor; fall back if not available
-            p = get_processor()
-            if p is not None:
-                health = p.get_health_status()
-                return HealthResponse(**health)
-            # Fallback health without processor (e.g., keys missing)
-            cfg = ConfigManager()
-            folders = {
-                'watch': cfg.get("processing.watch_folder"),
-                'processed': cfg.get("processing.processed_folder"),
-                'error': cfg.get("processing.error_folder"),
-                'output': cfg.get("processing.output_folder"),
-            }
-            folder_status = {}
-            for name, path in folders.items():
-                try:
-                    folder_status[name] = bool(path and os.path.exists(path) and os.access(path, os.W_OK))
-                except Exception:
-                    folder_status[name] = False
-            stats = db.get_job_stats()
-            return HealthResponse(
-                healthy=False,
-                connections={
-                    'deepgram': False,
-                    'openai': bool(os.getenv('OPENAI_API_KEY')),
-                    'database': True,
-                },
-                folders=folder_status,
-                stats=stats,
-            )
+            snapshot = get_cached_health(force=force)
+            return HealthResponse(**snapshot)
         except Exception as e:
             log_error(f"Error getting health status: {e}")
             raise HTTPException(status_code=500, detail="Failed to get health status")

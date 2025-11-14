@@ -3,6 +3,7 @@ import time
 from typing import Dict, Any, Optional
 from deepgram import DeepgramClient, DeepgramClientOptions, FileSource
 from src.utils import ConfigManager, log_info, log_error, log_warning
+from src.utils.connectivity import check_deepgram_connectivity
 
 class DeepgramTranscriber:
     def __init__(self):
@@ -155,23 +156,8 @@ class DeepgramTranscriber:
                 return "Error processing transcript"
     
     def test_connection(self) -> bool:
-        """Test Deepgram API connection"""
-        try:
-            # Create a minimal test payload (empty buffer)
-            payload: FileSource = {"buffer": b""}
-            options = {"model": "nova-2"}
-            
-            # This will fail but should give us a proper API response indicating connection works
-            try:
-                self.client.listen.prerecorded.v("1").transcribe_file(payload, options)
-            except Exception as e:
-                # If we get a specific error about the audio format, the API is working
-                if "audio" in str(e).lower() or "format" in str(e).lower():
-                    return True
-                raise e
-            
-            return True
-            
-        except Exception as e:
-            log_error(f"Deepgram connection test failed: {e}")
-            return False
+        """Test Deepgram API connection via lightweight ping."""
+        ok, reason = check_deepgram_connectivity()
+        if not ok and reason:
+            log_error(f"Deepgram connection test failed: {reason}")
+        return ok

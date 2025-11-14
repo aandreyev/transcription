@@ -1,15 +1,25 @@
 import os
 import yaml
+from pathlib import Path
 from typing import Dict, Any
 from dotenv import load_dotenv
 import re
 
 class ConfigManager:
+    _repo_root = Path(__file__).resolve().parents[2]
+
     def __init__(self, config_path: str = "config/config.yaml", env_path: str = "config/.env"):
-        self.config_path = config_path
-        self.env_path = env_path
+        self.config_path = self._resolve_path(config_path)
+        self.env_path = self._resolve_path(env_path)
         self._config = None
         self._load_config()
+
+    def _resolve_path(self, path: str | os.PathLike[str]) -> str:
+        """Ensure config paths are absolute and anchored to the repo root."""
+        candidate = Path(path)
+        if not candidate.is_absolute():
+            candidate = self._repo_root / candidate
+        return str(candidate)
     
     def _load_config(self):
         """Load configuration from YAML and environment variables"""
